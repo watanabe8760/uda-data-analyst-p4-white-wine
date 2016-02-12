@@ -1,9 +1,15 @@
 ---
 title: "Quality and Physicochemical Properties of White Wine"
-author: "Teru Watanabe"
-date: "Thursday, February 11, 2016"
+author: "[Teru Watanabe](https://ph.linkedin.com/in/teruwatanabe)"
+date: "Friday, February 12, 2016"
 output: html_document
 ---
+
+```{r global options, include=F}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, 
+                      echo=F, warning=F, message=F)
+```
+
 
 ### Table of Contents
 1. Abstract
@@ -40,7 +46,7 @@ The Wine Quality dataset is downloaded from the following website.
 The zip file contains two csv files, one for red wines (winequality-red.csv) and one for white wines (winequality-white.csv). In this project only the white wine data is used.
 
 The white wine csv file is loaded into R as follows. 
-```{r}
+```{r loading data}
 # Load csv file
 ww <- read.table("./input/winequality-white.csv", header=T, sep=";")
 str(ww)
@@ -49,7 +55,7 @@ The first eleven variables are physicochemical properties acquired from a comput
 
 
 For a sake of convenience of analysis, original variable names and independent variable names (physicochemical properties) are defined.
-```{r}
+```{r constants}
 # Define original variable names
 ORIGINAL <- colnames(ww)
 # Define independent variable names
@@ -57,19 +63,21 @@ INDEPENDENT <- colnames(ww)[1:11]
 ```
 
 To enable to look at the quality as a classification, a factor variable which is converted from the numerical one is added.
-```{r}
+```{r quality.f}
 ww$quality.f <- as.factor(ww$quality)
+summary(ww$quality.f)
 ```
 
 
 
 # 3. Library
 The following libraries are used in this project.
-```{r, message=F, warning=F}
+```{r loading library, echo=T}
 # For visualization
 library(ggplot2)
 library(gridExtra)
 library(corrplot)
+library(dplyr)
 # For modeling
 library(psych)
 library(memisc)
@@ -83,16 +91,22 @@ library(randomForest)
 
 # 4. Exploratory Analysis
 ## 4.1. Univariate Analysis
-```{r}
+```{r summary}
 summary(ww)
 ```
 
-All variables except `residual.sugar` have very similar median and mean. This makes us imagine symetrical distributions. Also, by looking at 1st quarter and 3rd quarter, it feels that they are relatively close to the center values. So how do they look like?
+All variables except `residual.sugar` have very similar median and mean. This makes us imagine symetrical distributions. Also, by looking at 1st quarter and 3rd quarter, it feels that they are relatively close to the center values. So how do they look like? Blue lines show the mean and red lines how the median of distribution. Also dot-lines are 1st and 3rd quantiles.
 
-```{r, out.width='\\maxwidth'}
+```{r densityplot1}
 dens <- lapply(ORIGINAL, FUN=function(var) {
   ggplot(ww, aes_string(x=var)) + 
-    geom_density(fill='gray')
+    geom_density(fill='gray') +
+    geom_vline(aes(xintercept=mean(ww[, var])), color='blue', size=1) +
+    geom_vline(aes(xintercept=median(ww[, var])), color='red', size=1) +
+    geom_vline(aes(xintercept=quantile(ww[, var], 0.25)), 
+               linetype='dashed', size=0.5) + 
+    geom_vline(aes(xintercept=quantile(ww[, var], 0.75)), 
+               linetype='dashed', size=0.5)
   })
 do.call(grid.arrange, args=c(dens, list(ncol=3)))
 ```
@@ -100,14 +114,14 @@ do.call(grid.arrange, args=c(dens, list(ncol=3)))
 As expected, most of them, except `residual.sugar` and `alcohol`, have symetrical distribution althoguh some have outliers in positive side. The dependent variiable `quality` is a little bit exceptional since it's a discrete number variable.
 
 To have a better sense about the distributions, let's standardize and see.
-```{r}
+```{r scaled}
 ww_scaled <- data.frame(scale(ww[, ORIGINAL]))
 summary(ww_scaled)
 ```
 
 Since the 1st and 3rd quarter of standard normal distribution is `r round(qnorm(0.25), 3)` and `r round(qnorm(0.75), 3)` respectively, some of them look really close to it. So let's check the normality by Q-Q plot.
 
-```{r, out.width='\\maxwidth'}
+```{r qqplot}
 par(mfrow=c(4,3), mar=c(2,2,2,2))
 dummy <- lapply(ORIGINAL, FUN=function(var) {
   qqnorm(ww_scaled[, var], main=var)
@@ -120,7 +134,7 @@ Frankly speaking, all of them follow normal distribution in the duration between
 
 ## 4.2. Bivariate Analysis
 To take an overview of relationships between two variables, let's start with correlation matrix.
-```{r}
+```{r corrplot}
 corrplot.mixed(cor(ww[, ORIGINAL]))
 ```
 
@@ -134,7 +148,7 @@ In terms of relationships between independent variables, some strong correlation
 
 To see relationships between `quality` and independent variables closely, let's create boxplots which desceribe each independent variable per quality level. Here I remove outliers in the positive side to visualize the mojority clearer.
 
-```{r, warning=F, out.width='\\maxwidth'}
+```{r boxplot1}
 showBoxplt <- function(df, y, x='quality.f', lower=0, upper=.99) {
   ggplot(df, aes_string(x=x, y=y, fill=x)) + 
     geom_boxplot() + 
@@ -142,14 +156,28 @@ showBoxplt <- function(df, y, x='quality.f', lower=0, upper=.99) {
          quantile(df[, y], prob=upper)) +
     theme(legend.position="none")
 }
-boxp <- lapply(INDEPENDENT, FUN=function(var) showBoxplt(ww, var))
-do.call(grid.arrange, args=c(boxp, list(ncol=3)))
+boxp1 <- lapply(INDEPENDENT, FUN=function(var) showBoxplt(ww, var))
+do.call(grid.arrange, args=c(boxp1, list(ncol=3)))
 ```
 
 By looking at the center lines and position of boxes, we can feel the correlation in `alcohol` and `density` which we found in the correlation matrix. As `quality` goes up, `alcohol` also goes up and `density` goes down. Meanwhile the others look almost flat.
 
+```{r boxplot1-1, fig.height=4}
+boxp.idx1 <- which(INDEPENDENT == 'alcohol' | INDEPENDENT == 'density')
+do.call(grid.arrange, args=c(boxp1[boxp.idx1], list(ncol=2)))
+```
+
+We can see a loose trend in `alcohol` and `density`.
+
+```{r boxplot1-2, fig.height=4}
+boxp.idx2 <- which(INDEPENDENT == 'pH' | INDEPENDENT == 'sulphates')
+do.call(grid.arrange, args=c(boxp1[boxp.idx2], list(ncol=2)))
+```
+
+But for the others, for example `pH` and `sulphates` shown above look flat and no distiction among quality levels. Remember, quality 9 which looks a little different has just five data points.
+
 Since it's hard to find significant factor at this point, let's create a new variable which has fewer quality levels and see if it can provide new insights.
-```{r}
+```{r quality.f2}
 # [Quality conversion 1]
 # Create a simpler classification of quality.
 #   3, 4, 5 -> bad
@@ -168,30 +196,63 @@ summary(ww[, c('quality.f', 'quality.f2')])
 
 So now how do boxplots look like?
 
-```{r, warning=F, out.width='\\maxwidth'}
-boxp <- lapply(INDEPENDENT, 
-               FUN=function(var) showBoxplt(ww, var, 'quality.f2'))
-do.call(grid.arrange, args=c(boxp, list(ncol=3)))
+```{r boxplot2}
+boxp2 <- lapply(INDEPENDENT, 
+                FUN=function(var) showBoxplt(ww, var, 'quality.f2'))
+do.call(grid.arrange, args=c(boxp2, list(ncol=3)))
 ```
 
 While significant differences among quality levels in `density` and `alcohol` got clearer, the others got flatter. This feels like that the other physicochemical properties do not really matter for quality.
 
-Just to make sure, let's look at the new quality variable through density plot.
-```{r, warning=F, out.width='\\maxwidth'}
+The same zoom-up goes as follows.
+
+```{r boxplot2-1, fig.height=4}
+do.call(grid.arrange, args=c(boxp2[boxp.idx1], list(ncol=2)))
+```
+
+They show a nice hierarchical distinction.
+
+```{r boxplot2-2, fig.height=4}
+do.call(grid.arrange, args=c(boxp2[boxp.idx2], list(ncol=2)))
+```
+
+They got flatter.
+
+To take a look at it from a different angle, let's create density plots. Vertical lines show the mean of each distribution.
+
+```{r densityplot2}
 showDensplt <- function(df, x, cls='quality.f2', lower=0, upper=.99) {
+  # Compute mean of distribution per level of cls
+  mu <- summarise_(group_by_(ww, cls), paste0('mean(', x, ')'))
+  colnames(mu)[2] <- x
+  
   ggplot(df, aes_string(x=x, fill=cls)) + 
     geom_density(alpha=0.3) +
+    geom_vline(aes_string(xintercept=x, color=cls), data=mu, size=1) +
     xlim(quantile(df[, x], prob=lower), 
-         quantile(df[, x], prob=upper))
+         quantile(df[, x], prob=upper)) +
+    theme(legend.position="none")
 }
 dens <- lapply(INDEPENDENT, FUN=function(col) showDensplt(ww, col))
 do.call(grid.arrange, args=c(dens, list(ncol=3)))
 ```
 
-One thing I did not notice when I saw the boxplots above is that `chlorides` has the similar distribution to `density`. It was difficult to notice because of the skewness.
+The trends and flatness observed in boxplots look like as follows by density plots.
+
+```{r densityplot2-1, fig.height=4}
+do.call(grid.arrange, args=c(dens[boxp.idx1], list(ncol=2)))
+```
+
+The hierarchical distinction observed in the previous boxplots are shown as a wider range of vertical lines.
+
+```{r densityplot2-2, fig.height=4}
+do.call(grid.arrange, args=c(dens[boxp.idx2], list(ncol=2)))
+```
+
+The distribution and mean are very similar among quality levels.
 
 Since it's still hard to find any significance other than `alcohol` and `density`, let's try simpler quality classifications for extreme qualities.
-```{r}
+```{r excellent}
 # [Quality conversion 2]
 # Create factor variables for extreme qualities.
 #   excellent: 9,8 -> True
@@ -201,40 +262,57 @@ ww$inferior <- ifelse(ww$quality == 3 | ww$quality == 4, T, F)
 summary(ww[, c('excellent', 'inferior')])
 ```
 
-So can we see any significant independent variable in extreme cases?
+So can we see any significant independent variable in extreme cases? First take a look at excellet wines.
 
-```{r, warning=F, out.width='\\maxwidth'}
-boxp <- lapply(INDEPENDENT, 
-               FUN=function(var) showBoxplt(ww, y=var, x='excellent'))
-do.call(grid.arrange, args=c(boxp, list(ncol=3)))
+```{r boxplot3}
+boxp3 <- lapply(INDEPENDENT, 
+                FUN=function(var) showBoxplt(ww, y=var, x='excellent'))
+do.call(grid.arrange, args=c(boxp3, list(ncol=3)))
 ```
 
-While the gap in `alcohol` and `density` got more significant, not so much difference can be observed in the others. Maybe pH of `excellent=TRUE` is slightly bigger than `excellent=FALSE`.
+While the gap in `alcohol` and `density` got more significant, not so much difference can be observed in the others. Maybe `pH` of `excellent=TRUE` is slightly bigger than `excellent=FALSE`.
 
-```{r, warning=F, out.width='\\maxwidth'}
-boxp <- lapply(INDEPENDENT, 
-               FUN=function(var) showBoxplt(ww, y=var, x='inferior'))
-do.call(grid.arrange, args=c(boxp, list(ncol=3)))
+```{r boxplot3-1, fig.height=4}
+do.call(grid.arrange, args=c(boxp3[boxp.idx1], list(ncol=2)))
+```
+```{r boxplot3-2, fig.height=4}
+do.call(grid.arrange, args=c(boxp3[which(INDEPENDENT == 'pH')], 
+                             list(ncol=2)))
+```
+
+How about inferior wines?
+
+```{r boxplot4}
+boxp4 <- lapply(INDEPENDENT, 
+                FUN=function(var) showBoxplt(ww, y=var, x='inferior'))
+do.call(grid.arrange, args=c(boxp4, list(ncol=3)))
 ```
 
 What is interesting is that `alcohol` does not have significant difference when it is observed from an inferior viewpoint. Also the difference in `free.sulfur.dioxide` seems to be significant.
 
-Those observations imply that:  
+```{r boxplot4-1, fig.height=4}
+boxp.idx3 <- which(INDEPENDENT == 'alcohol' | 
+                     INDEPENDENT == 'free.sulfur.dioxide')
+do.call(grid.arrange, args=c(boxp4[rev(boxp.idx3)], list(ncol=2)))
+```
+
+Those observations imply that:
+
 1. Excellent wines tend to have high alcohol volume, but high alcohol volume does not promise to be excellent.
 2. Infeior wines tend to have lower free.sulfur.dioxide, but low free.sulfur.dioxide does not promise to be inferior.
 
 
 ## 4.3. Multivariate Analysis
 
-So now let's turn into higher dimentional space. The idea here is that one variable is visualized by color so that other two variables can be mapped on 2D space. We might be able to find certain rules displayed by color on 2D space.
+So now let's turn into higher dimensional space. The idea here is that one variable is visualized by color so that other two variables can be mapped on 2D space. We might be able to find certain rules displayed by color on 2D space.
 
-First, let's try a higher dimentional version of scatter plot. Since the strongest factor to determine `quality` we found so far is `alcohol`, I'd like to map `alcohol` and `quality` on 2D axis and one independent variable into color. Each independent variable used for color is scaled in the following color scheme in its own data range after removing top 1 % as outliers.
+First, let's try a higher dimensional version of scatter plot. Since the strongest factor to determine `quality` we found so far is `alcohol`, I'd like to map `alcohol` and `quality` on 2D axis and one independent variable into color. Each independent variable used for color is scaled in the following color scheme in its own data range after removing top 1 % as outliers.
 
 - Low = Blue
 - Mid = Violet
 - High = Red
 
-```{r, warning=F, out.width='\\maxwidth'}
+```{r scatterplot1}
 showScatpltColored <- function(df, color, x='alcohol', y='quality',
                           lower=0.00, upper=0.99) {
   ggplot(df, aes_string(x=x, y=y, color=color)) +
@@ -253,9 +331,9 @@ do.call(grid.arrange, args=c(scat_wc, list(ncol=3)))
 
 Since `alcohol` is mapped on x-axis and `quality` is mapped on y-axis, horizontal color distinction is related to `alcohol` and vertical color distinction is related to `quality`. So what we want to find is vertical distinction in a sense. Unfortunately, we cannot see vertical color distinction in any plot, although horizontal color distinction is observed in `alcohol` (which is obvious) and `density` (which is also expected because of the correlation with alcohol).
 
-Next, let's convert `quality` into colors. Meaning, arbitrary two independent variables are mapped on 2D axis. Since I don't know which combination might lead a better insight, I'm going to check all the combinations. What we want to find here is any chunck of color on 2D. Note, I use the simpler quality classification ('bad', 'normal', 'good') to make it easy.
+Next, let's convert `quality` into colors. Meaning, arbitrary two independent variables are mapped on 2D axis. Since I don't know which combination might lead a better insight, I'm going to check all the combinations. What we want to find here is any chunck of color on 2D. 
 
-```{r, out.width='\\maxwidth'}
+```{r scatterplot2}
 showScatpltColored2 <- function(df, x, y, color='quality.f2',
                            lower=0.00, upper=0.99){
   ggplot(df, aes_string(x=x, y=y, color=color)) +
@@ -267,47 +345,29 @@ showScatpltColored2 <- function(df, x, y, color='quality.f2',
 }
 scat_wc2 <- lapply(combn(INDEPENDENT, 2, simplify=F), 
                    FUN=function(var) showScatpltColored2(ww, var[1], var[2]))
+# Just check the number of plots
 length(scat_wc2)
 ```
 
-Since it produces 55 scatter plots, I'm not showing them. After checking those scatter plots, I noticed that an interesting rule is observed in a scatter plot by `density` and `residual.sugar`. Let's zoom up the plot.
+After checking 55 scatter plots that are all the combinations of independent variables (11 choose 2), I noticed that an interesting pattern is observed in a scatter plot by `density` and `residual.sugar`. Let's zoom up the plot.
 
-```{r, warning=F}
-ggplot(ww, aes(x=density, y=residual.sugar, color=quality.f2)) +
+```{r scatterplot3, fig.height=4}
+# Colored by simplified quality level
+scat.qf2 <- ggplot(ww, aes(x=density, y=residual.sugar, color=quality.f2)) +
   geom_point(position='jitter') + 
   xlim(min(ww$density), quantile(ww$density, prob=0.99)) +
   ylim(min(ww$residual.sugar), quantile(ww$residual.sugar, prob=0.99))
-```
-
-Holding `density`, higher `residual.sugar` seem to have better `quality`. Maybe the distinction is not so deterministic, but it's recognizable in a sense.
-
-How does it look like if the original quality level is applied to the color scheme? 
-
-```{r, warning=F}
-ggplot(ww, aes(x=density, y=residual.sugar, color=quality)) +
+# Colored by original quality level
+scat.qf <- ggplot(ww, aes(x=density, y=residual.sugar, color=quality.f)) +
   geom_point() + 
+  scale_color_brewer() +
   xlim(min(ww$density), quantile(ww$density, prob=0.99)) +
-  ylim(min(ww$residual.sugar), quantile(ww$residual.sugar, prob=0.99)) +
-  scale_color_gradientn(colors=rainbow(7))
+  ylim(min(ww$residual.sugar), quantile(ww$residual.sugar, prob=0.99))
+
+do.call(grid.arrange, args=c(list(scat.qf2, scat.qf), list(ncol=2)))
 ```
 
-The rule found in the simplified quality level feels held, but the dominance of middle levels makes it unclear. So let's separate the scatter plot by quality level.
-
-```{r, warning=F}
-scat_per_qual <- lapply(9:3, FUN=function(n) {
-  ggplot(subset(ww, quality == n), 
-         aes(x=density, y=residual.sugar)) +
-    geom_point(color=rainbow(7)[n-2]) + 
-    ggtitle(paste("Quality", n)) + 
-    xlim(min(ww$density), quantile(ww$density, prob=0.99)) +
-    ylim(min(ww$residual.sugar), quantile(ww$residual.sugar, prob=0.99))
-})
-do.call(grid.arrange, args=c(scat_per_qual, list(ncol=3)))
-```
-
-The impression has slightly changed. Although the layer created by quality 8 and 4 gives us the same impression, the spread of middle levels (7, 6, 5) and sparsity of quality 3 make us think that this finding might be just a chance due to the lack of data for extreme cases.
-
-Even if the finding is true, it seems to be hard to express the effect by a simple linear coeffecient due to the wide spread of data point in one level.
+The left one uses the simplified quality level and the right one uses the original quality level. In both plots, holding `density`, higher `residual.sugar` seem to have better `quality`. Maybe the distinction is not so deterministic, but it's recognizable in a sense. It seems to be hard to express the effect by a simple linear coeffecient due to the wide spread and overlap of data points.
 
 
 
@@ -317,7 +377,7 @@ Based on the exploratory analysis in the previous section, there does not seem t
 
 Before start I'd like to define all formulas used in this section and an utility function to summarize model performance.
 
-```{r}
+```{r formula}
 # Original numeric variable prediction
 fml1 <- as.formula(paste("quality", "~", 
                          paste(INDEPENDENT, collapse=' + ')))
@@ -334,7 +394,7 @@ fml.e <- as.formula(paste("excellent", "~",
 fml.i <- as.formula(paste("inferior", "~", 
                           paste(INDEPENDENT, collapse=' + ')))
 ```
-```{r}
+```{r describePerformance}
 describePerformance <- function(org, pred) {
   cat("[Contingency Table]\n")
   print(table(org, pred))
@@ -360,7 +420,7 @@ describePerformance <- function(org, pred) {
 
 Since this is an extension of exploratory analysis, all data is used for modeling (no validation and test set) and meticulous performance tuning is not performed. For linear regression, all physicochemical properties are used as independent variables first and simply drop one by one whose p-value is not significant (> 0.05).
 
-```{r}
+```{r lm}
 m1 <- lm(fml1, ww)
 m2 <- update(m1, ~ . - citric.acid)
 m3 <- update(m2, ~ . - chlorides)
@@ -370,7 +430,7 @@ mtable(m1, m2, m3, m4)
 
 As expected, it's not performing so well. If you look at R-squared in the final model, it's just 0.282 which means that only 28 % of variance of `quality` is explained by those independent variables.
 
-```{r}
+```{r lm evaluated}
 cat("RMSE:", sqrt(mean((ww$quality - m4$fitted.values)^2)))
 describePerformance(ww$quality, round(m4$fitted.values, 0))
 ```
@@ -385,7 +445,7 @@ This implies that there is not any simple linear relationship between quality an
 So let's try some non-linear models. How does Support Vector Machine perform?
 
 
-```{r}
+```{r svm1}
 # Original numeric variable prediction
 svm1 <- svm(fml1, ww)
 cat("RMSE:", sqrt(mean((ww$quality - svm1$fitted)^2)))
@@ -394,7 +454,7 @@ describePerformance(ww$quality, round(svm1$fitted, 0))
 
 Although it's still not performing well for deviant cases, the performance is better than linear regression model. Especially there is a big improvement in Cohen's kappa.
 
-```{r}
+```{r svm2}
 # As a classification prediction
 svm2 <- svm(fml2, ww)
 describePerformance(ww$quality.f, svm2$fitted)
@@ -402,7 +462,7 @@ describePerformance(ww$quality.f, svm2$fitted)
 
 When it's converted to a classification prediction, the performance got worse. Maybe it's because rounding off in regression model is working in a good way.
 
-```{r}
+```{r svm3}
 # As a simpler classification ("bad", "normal", "good") prediction
 svm3 <- svm(fml3, ww)
 describePerformance(ww$quality.f2, svm3$fitted)
@@ -410,27 +470,27 @@ describePerformance(ww$quality.f2, svm3$fitted)
 
 The simpler classification gives the model a slight improvement. But not so much.
 
-```{r}
+```{r svm4}
 # Extreme case detection for excellent ones
 ww$excellent <- as.factor(ww$excellent)
 svm4 <- svm(fml.e, ww)
 describePerformance(ww$excellent, svm4$fitted)
 ```
-```{r}
+```{r svm5}
 # Extreme case detection for inferior ones
 ww$inferior <- as.factor(ww$inferior)
 svm5 <- svm(fml.i, ww)
 describePerformance(ww$inferior, svm5$fitted)
 ```
 
-It seems to be very difficult for SVM to predict extreme cases. This implies that there is not any significant distinction for extreme qualities even for the boundry scheme of SVM in the high dimentional space.
+It seems to be very difficult for SVM to predict extreme cases. This implies that there is not any significant distinction for extreme qualities even for the boundry scheme of SVM in the high dimensional space.
 
 
 ## 5.3. Random Forest
 
 Lastly let's see how Random Forest works.
 
-```{r}
+```{r rf1}
 # Original numeric variable prediction
 set.seed(20160211)
 rf1 <- randomForest(fml1, ww)
@@ -440,7 +500,7 @@ describePerformance(ww$quality, round(rf1$predicted, 0))
 
 Even for Random Forest it is still hard to predict deviant cases. Meanwhile it shows a better performance than SVM overall because the prediction accuracy for center values (5, 6, 7) got better.
 
-```{r}
+```{r rf2}
 # As a classification prediction
 rf2 <- randomForest(fml2, ww)
 describePerformance(ww$quality.f, rf2$predicted)
@@ -448,7 +508,7 @@ describePerformance(ww$quality.f, rf2$predicted)
 
 When it's converted to a classification prediction, it outperforms the regression version. Here improvements in the prediction accuracy for quality level 4 and 8 are observed. It feels that the tree-based rule logic and randomness of the model enables to predict some deviant cases although it still cannot output quality level 3 and 9.
 
-```{r}
+```{r rf3}
 # As a simpler classification ("bad", "normal", "good") prediction
 rf3 <- randomForest(fml3, ww)
 describePerformance(ww$quality.f2, rf3$predicted)
@@ -456,7 +516,7 @@ describePerformance(ww$quality.f2, rf3$predicted)
 
 This is the best performance so far. Simplification of quality level worked well for Random Forest.
 
-```{r}
+```{r rf4}
 # Extreme case detection for excellent ones
 rf4 <- randomForest(fml.e, ww)
 describePerformance(ww$excellent, rf4$predicted)
@@ -464,7 +524,7 @@ describePerformance(ww$excellent, rf4$predicted)
 
 While SVM could not detect any excellent ones, Random Forest could detect about 42 % of them.
 
-```{r}
+```{r rf5}
 # Extreme case detection for inferior ones
 rf5 <- randomForest(fml.i, ww)
 describePerformance(ww$inferior, rf5$predicted)
@@ -478,52 +538,75 @@ This is slightly better than SVM though, detection rate of inferior ones is abou
 As a summary, I'm going to revisit findings with plots.
 
 ## 6.1. Alcohol
-```{r, warning=F}
+```{r final1}
 ggplot(ww, aes(x=quality.f2, y=alcohol, fill=quality.f2)) + 
   geom_boxplot() + 
+  stat_summary(fun.data=mean_cl_normal, geom="errorbar", 
+               color='red', size=1) +
   ylim(quantile(ww$alcohol, prob=0.00), 
        quantile(ww$alcohol, prob=0.99)) +
+  ggtitle("Range of Alcohol per Quality Level") + 
   xlab("Quality") +
-  ylab("Alcohol") +
-  theme(legend.position="none")
+  ylab("Alcohol (%)") +
+  theme(title=element_text(size=18, face="bold"),
+        axis.title=element_text(size=14), 
+        axis.text=element_text(size=12),
+        legend.position="none")
 ```
 
-Generally speaking better quality ones have more alcohol volume. However, if the range of whiskers (tails of distribution) is included, the range of alcohol is almost the same for all quality levels. So only `alcohol` cannot be a deterministic factor of quality.
+The 95 % confidence intervals are added by red lines that have relatively narrow range because of large numbers of data points. It shows that mean of each group are significantly different at that confidence level. This can imply that higher alcohol volume produce better quality wine although the causality cannot be clear only from this data analysis. (It is unclear whether high alcohol volume directly contributes to better quality.)
 
 ## 6.2. Density
-```{r, warning=F}
+```{r final2}
+# Compute mean of distribution per level of cls
+mu <- summarise(group_by(ww, quality.f2), mean(density))
+colnames(mu)[2] <- "density"
+
 ggplot(ww, aes(x=density, fill=quality.f2)) + 
   geom_density(alpha=0.3) +
+  geom_vline(aes(xintercept=density, color=quality.f2), 
+             data=mu, size=1, show.legend=F) +
   xlim(quantile(ww$density, prob=0.00), 
        quantile(ww$density, prob=0.99)) +
-  xlab("Density") +
+  guides(fill=guide_legend(title="Quality", reverse=T)) +
+  ggtitle("Distribution of Density per Quality Level") + 
+  xlab("Density (g/ml)") +
   ylab("") +
-  guides(fill=guide_legend(title="Quality", reverse=T))
+  theme(title=element_text(size=18, face="bold"),
+      axis.title=element_text(size=14), 
+      axis.text=element_text(size=12),
+      legend.text=element_text(size=12))
 ```
 
-This is a density plot of `density`. As `quality` goes up, the center of distribution of `density` gets smaller. Since `density` has a high correlation coeffecient with `alcohol`, this is something expected. A large area of overlapping implies that only `density` cannot be a deterministic factor of quality as well.
+This is a density plot of `density`. As `quality` goes up, the center of distribution of `density` gets smaller. Since `density` has a high correlation coeffecient with `alcohol`, this is something expected. The lower `density` possibly produce better quality wine although the causality is not deterministic here as well. (This might be just due to the negative correlation (`r round(cor(ww$alcohol, ww$density), 3)`) between `alcohol` and `density`.)
 
 
 ## 6.3. Residual Sugar with Density
-```{r, warning=F}
+```{r final3}
 ggplot(ww, aes(x=density, y=residual.sugar, color=quality.f2)) +
   geom_point(position='jitter') + 
+  geom_smooth(aes(color=quality.f2), method=lm) +
   xlim(min(ww$density), 
        quantile(ww$density, prob=0.99)) +
   ylim(min(ww$residual.sugar), 
        quantile(ww$residual.sugar, prob=0.99)) +
-  xlab("Density") +
-  ylab("Residual Sugar") +
-  guides(color=guide_legend(title="Quality", reverse=T))
+  guides(color=guide_legend(title="Quality", reverse=T)) +
+  ggtitle("Quality on Density and Residual Suagr Dimension") + 
+  xlab("Density (g/mL)") +
+  ylab("Residual Sugar (g/L)") +
+  theme(title=element_text(size=18, face="bold"),
+      axis.title=element_text(size=14), 
+      axis.text=element_text(size=12),
+      legend.text=element_text(size=12))
 ```
 
-Hoding density, better quality ones seem to have higher `residual.sugar`. Again, the overlapping area is large and it's not deterministic though. At the high end of density, blue dots are relatively located lower position so the rule does not seem to be applicable.
+A regression line is added to each quality group with the shadow of confidence interval. When `density` is low, the distinction among the quality levels is clear, but as `density` increases the margin gets narrower and at the high end they cross. This means that the distinction in the 2D space is only applicable where `density` is low to middle.
 
-Through exploratory data analysis, I found that `alcohol`, `density` and `residual.sugar` are possible factors which affect quality level though, none of them are deterministic. 
+Through exploratory data analysis, I found that `alcohol`, `density` and `residual.sugar` are possible factors which affect quality level in an interpretable manner. Our sense of taste feels quite complex and the result of modeling implies that accurate prediction of wine quality requires more complexity which is not interpretable through visualization in a few dimensional space.
 
 
 # 7. Reflection
-When I started out this project, I thought that it would not be so difficult to find hidden relationships between quality and physicochemical properties because the data set has only eleven independent variables and all of them are clean. But I soon noticed I was wrong after performing some visualizations through arbitrary variable choices. What I came up with ater the struggle was a brute force method which plots all the combination or pattern of variables. This way I could check if there is any interesting pattern in different type of 2D spaces effeciently. By systemizing recursive plotting through concise function calls, I also could minimize the amount of code. The plot in the section 6.3 is one of them that I could find by the brute force method and would have been difficult to be found otherwise.
+When I started out this project, I thought that it would not be so difficult to find hidden relationships between quality and physicochemical properties because the data set has only eleven independent variables and all of them are clean. But I soon noticed I was wrong after performing some visualizations through arbitrary variable choices. What I came up with ater the struggle was a brute force method which plots all the combinations of variables. This way I could check if there is any interesting pattern in different type of 2D spaces effeciently. By systemizing recursive plotting through concise function calls, I also could minimize the amount of code. The plot in the section 6.3 is one of them that I could find by the brute force method and would have been difficult to be found otherwise.
 
 I came up with new quality level representations to make more sense for visualization. Those are transformation of the dependent variable and it worked. But I could not utilize transformation of independent variables and feature engineering. Based on the observation in the modeling section, there is a tendency that more complex non-linear models perform better. But number of models I applied in this project is limitted and model tuning was not performed. So those things related to modeling are left for the future project.
 
@@ -531,5 +614,8 @@ I came up with new quality level representations to make more sense for visualiz
 
 # 8. Reference
 - R Markdown Reference Guide - http://www.rstudio.com/wp-content/uploads/2015/03/rmarkdown-reference.pdf
+- Knitr with R Markdown, knitr in a knutshell - http://kbroman.org/knitr_knutshell/pages/Rmarkdown.html
+- Chunk options and package options, knitr - http://yihui.name/knitr/options/
+- Set theme elements, ggplot2 2.0.0 - http://docs.ggplot2.org/current/theme.html
 
 
