@@ -7,7 +7,7 @@ output: html_document
 
 ```{r global options, include=F}
 knitr::opts_chunk$set(fig.width=12, fig.height=8, 
-                      echo=F, warning=F, message=F)
+                      echo=T, warning=F, message=F)
 ```
 
 
@@ -162,14 +162,14 @@ do.call(grid.arrange, args=c(boxp1, list(ncol=3)))
 
 By looking at the center lines and position of boxes, we can feel the correlation in `alcohol` and `density` which we found in the correlation matrix. As `quality` goes up, `alcohol` also goes up and `density` goes down. Meanwhile the others look almost flat.
 
-```{r boxplot1-1, fig.height=4}
+```{r boxplot1-1, fig.height=4, echo=F}
 boxp.idx1 <- which(INDEPENDENT == 'alcohol' | INDEPENDENT == 'density')
 do.call(grid.arrange, args=c(boxp1[boxp.idx1], list(ncol=2)))
 ```
 
 We can see a loose trend in `alcohol` and `density`.
 
-```{r boxplot1-2, fig.height=4}
+```{r boxplot1-2, fig.height=4, echo=F}
 boxp.idx2 <- which(INDEPENDENT == 'pH' | INDEPENDENT == 'sulphates')
 do.call(grid.arrange, args=c(boxp1[boxp.idx2], list(ncol=2)))
 ```
@@ -206,13 +206,13 @@ While significant differences among quality levels in `density` and `alcohol` go
 
 The same zoom-up goes as follows.
 
-```{r boxplot2-1, fig.height=4}
+```{r boxplot2-1, fig.height=4, echo=F}
 do.call(grid.arrange, args=c(boxp2[boxp.idx1], list(ncol=2)))
 ```
 
 They show a nice hierarchical distinction.
 
-```{r boxplot2-2, fig.height=4}
+```{r boxplot2-2, fig.height=4, echo=F}
 do.call(grid.arrange, args=c(boxp2[boxp.idx2], list(ncol=2)))
 ```
 
@@ -239,13 +239,13 @@ do.call(grid.arrange, args=c(dens, list(ncol=3)))
 
 The trends and flatness observed in boxplots look like as follows by density plots.
 
-```{r densityplot2-1, fig.height=4}
+```{r densityplot2-1, fig.height=4, echo=F}
 do.call(grid.arrange, args=c(dens[boxp.idx1], list(ncol=2)))
 ```
 
 The hierarchical distinction observed in the previous boxplots are shown as a wider range of vertical lines.
 
-```{r densityplot2-2, fig.height=4}
+```{r densityplot2-2, fig.height=4, echo=F}
 do.call(grid.arrange, args=c(dens[boxp.idx2], list(ncol=2)))
 ```
 
@@ -272,10 +272,10 @@ do.call(grid.arrange, args=c(boxp3, list(ncol=3)))
 
 While the gap in `alcohol` and `density` got more significant, not so much difference can be observed in the others. Maybe `pH` of `excellent=TRUE` is slightly bigger than `excellent=FALSE`.
 
-```{r boxplot3-1, fig.height=4}
+```{r boxplot3-1, fig.height=4, echo=F}
 do.call(grid.arrange, args=c(boxp3[boxp.idx1], list(ncol=2)))
 ```
-```{r boxplot3-2, fig.height=4}
+```{r boxplot3-2, fig.height=4, echo=F}
 do.call(grid.arrange, args=c(boxp3[which(INDEPENDENT == 'pH')], 
                              list(ncol=2)))
 ```
@@ -290,7 +290,7 @@ do.call(grid.arrange, args=c(boxp4, list(ncol=3)))
 
 What is interesting is that `alcohol` does not have significant difference when it is observed from an inferior viewpoint. Also the difference in `free.sulfur.dioxide` seems to be significant.
 
-```{r boxplot4-1, fig.height=4}
+```{r boxplot4-1, fig.height=4, echo=F}
 boxp.idx3 <- which(INDEPENDENT == 'alcohol' | 
                      INDEPENDENT == 'free.sulfur.dioxide')
 do.call(grid.arrange, args=c(boxp4[rev(boxp.idx3)], list(ncol=2)))
